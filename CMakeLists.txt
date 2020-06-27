@@ -1,4 +1,4 @@
-project(zmq)
+project(yadist-fs)
 
 include(ExternalProject)
 
