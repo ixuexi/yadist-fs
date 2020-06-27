@@ -19,3 +19,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/env.sh
 install(TARGETS store_ser store_act
         RUNTIME DESTINATION bin
 )
+
+install(FILES start_ser.sh start_act.sh chroot_test.sh
+        DESTINATION bin
+)
