@@ -15,7 +15,7 @@
 
 void *g_shash;
 char g_sr_path[ST_PATH_MAX];
-char g_sr_plen;
+int g_sr_plen;
 /*
  * temp lock, fuse muti-work thread conflict
  */
@@ -23,43 +23,8 @@ pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void set_store_root(int argc, char *argv[])
 {
-    int i;
-    for (i = 1; i < argc; i++) 
-        if (!strncmp(argv[i], "subdir=", 7)) {
-            strncpy(g_sr_path, argv[i] + 7, ST_PATH_MAX - 1);
-            g_sr_plen = strnlen(g_sr_path, ST_PATH_MAX - 1);
-            printf("store root dir=%s len=%d\n", g_sr_path, g_sr_plen);
-            break;
-        }
-}
-
-void get_file_dir(char *dir, char *path)
-{
-    char *cur, *last;
-    cur = strstr(path, "/");
-    if (!cur)
-        return;
-    while (cur) {
-        last = cur;
-        cur = strstr(cur + 1, "/");
-    }
-    strncpy(dir, path, last - path);
-    dir[last - path] = 0;
-}
-
-void resolve_path(char path[], char *rela, int len, int type)
-{
-    if (type == PATH_ABS) {
-        char *root = g_sr_path;
-        int rlen = g_sr_plen;
-        strncpy(path, root, rlen);
-        memcpy(path + rlen, rela, len);
-        path[rlen + len] = 0;
-    }
-    else if (type == PATH_RELA) {
-        strncpy(path, rela, len);
-        path[len] = 0;
-    }
+    g_sr_plen = get_subdir(argc, argv, g_sr_path, ST_PATH_MAX);
+    printf("store root dir=%s len=%d\n", g_sr_path, g_sr_plen);
 }
 
 int tx_file(char *cmd, zmsg_t *msg)
@@ -70,7 +35,7 @@ int tx_file(char *cmd, zmsg_t *msg)
     char path[ST_PATH_MAX];
     size_t mlen;
     int fd;
-    resolve_path(path, zframe_data(frame), zframe_size(frame), PATH_ABS);
+    resolve_path(path, g_sr_path, g_sr_plen, zframe_data(frame), zframe_size(frame), PATH_ABS);
     if (!strncmp(cmd + 8, "CT", 2)) {
         fd = open(path, O_WRONLY | O_CREAT, 0777);
         printf("recv file %s create ret %d\n", path, fd);
@@ -115,7 +80,7 @@ int tx_dir_node(char *cmd, zmsg_t *msg)
     char path[ST_PATH_MAX];
     int ret;
     frame = zmsg_next(msg);
-    resolve_path(path, zframe_data(frame), zframe_size(frame), PATH_ABS);
+    resolve_path(path, g_sr_path, g_sr_plen, zframe_data(frame), zframe_size(frame), PATH_ABS);
     ret = mkdir(path, 0777);
     printf("create dir %s ret %d\n", path, ret);
     frame = zmsg_next(msg);
@@ -140,10 +105,10 @@ int tx_link(char *cmd, zmsg_t *msg)
     char *linfo;
     int ret;
     frame = zmsg_next(msg);
-    resolve_path(path, zframe_data(frame), zframe_size(frame), PATH_ABS);
+    resolve_path(path, g_sr_path, g_sr_plen, zframe_data(frame), zframe_size(frame), PATH_ABS);
     frame = zmsg_next(msg);
     linfo = zframe_data(frame);
-    resolve_path(oldpath, zframe_data(frame), zframe_size(frame), PATH_RELA);
+    resolve_path(oldpath, g_sr_path, g_sr_plen, zframe_data(frame), zframe_size(frame), PATH_RELA);
     get_file_dir(pdir, path);
     chdir(pdir);
     ret = symlink(oldpath, path);

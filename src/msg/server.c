@@ -11,12 +11,20 @@
 #include "czmq.h"
 
 char *g_fbuf;
+char g_rr_path[ST_PATH_MAX];
+int g_rr_plen;
 
 char *file_buf(void)
 {
     if (!g_fbuf)
         g_fbuf = malloc(MAX_BUF_LEN);
     return g_fbuf;
+}
+
+void set_redirect_root(int argc, char *argv[])
+{
+    g_rr_plen = get_subdir(argc, argv, g_rr_path, ST_PATH_MAX);
+    printf("redirect root dir=%s len=%d\n", g_rr_path, g_rr_plen);
 }
 
 void get_file_info(int fd, struct fs_info *info)
@@ -49,12 +57,12 @@ void file_tran(char *name, struct req_ctx *ctx)
         if (tb++ == 0) {
             get_file_info(fd, &info);
             zmsg_addstr(msg, "TX_FILE_CT");
-            zmsg_addstr(msg, name);
+            zmsg_addstr(msg, path_cut(name, g_rr_plen));
             zmsg_addmem(msg, &info, sizeof(info));
         }
         else {
             zmsg_addstr(msg, "TX_FILE_AP");
-            zmsg_addstr(msg, name);
+            zmsg_addstr(msg, path_cut(name, g_rr_plen));
         }
         zmsg_addmem(msg, buf, rlen);
         ret = zmsg_send(&(msg), (zsock_t *)ctx->sock);
@@ -81,7 +89,7 @@ void dir_node_tran(char *path, struct req_ctx *ctx)
     struct fs_info info;
     zmsg_t *msg = zmsg_new();
     zmsg_addstr(msg, "TX_DIR");
-    zmsg_addstr(msg, path);
+    zmsg_addstr(msg, path_cut(path, g_rr_plen));
     get_dir_info(path, &info);
     zmsg_addmem(msg, &info, sizeof(info));
     ret = zmsg_send(&(msg), (zsock_t *)ctx->sock);
@@ -96,7 +104,7 @@ void link_tran(char *path, struct req_ctx *ctx)
     if (len > 0 && len < (ST_PATH_MAX - 1)) {
         zmsg_t *msg = zmsg_new();
         zmsg_addstr(msg, "TX_LINK");
-        zmsg_addstr(msg, path);
+        zmsg_addstr(msg, path_cut(path, g_rr_plen));
         zmsg_addmem(msg, buf, len);
         ret = zmsg_send(&(msg), (zsock_t *)ctx->sock);
         printf("send link msg ret %d\n", ret);
@@ -160,8 +168,7 @@ int proc_req_msg(zsock_t *s, zmsg_t *msg)
         printf("error msg len %zd\n", mlen);
         return -1;
     }
-    memcpy(path, zframe_data(frame), mlen);
-    path[mlen] = 0;
+    resolve_path(path, g_rr_path, g_rr_plen, zframe_data(frame), mlen, PATH_ABS);
     zmsg_destroy(&msg);
     process_req_path(path, &ctx);
     return 0;

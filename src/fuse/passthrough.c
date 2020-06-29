@@ -94,7 +94,7 @@ int get_srcdir(int argc, char *argv[])
     return f;
 }
 
-void get_subdir(int argc, char *argv[])
+void get_pass_subdir(int argc, char *argv[])
 {
     int i;
     for (i = 1; i < argc; i++) 
@@ -829,7 +829,7 @@ int passthrough_main(int argc, char *argv[], int (*pfn_req)(void *, char *), voi
 {
 	umask(0);
         argc -= get_srcdir(argc, argv);
-	get_subdir(argc, argv);
+	get_pass_subdir(argc, argv);
 	log_init();
     if (pfn_req)
         g_pfn_req = pfn_req;
