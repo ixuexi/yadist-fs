@@ -188,7 +188,7 @@ int do_fs_fault(const char *where, const char *path, int is_file)
 		ret = -1;
         goto proc_end;
 	}
-	printf("%s fault path: %s is file %d\n", where, path, is_file);
+	//printf("%s fault path: %s is file %d\n", where, path, is_file);
     if (g_pfn_req)
 	    ret = g_pfn_req(g_sock, (char *)path);
 proc_end:
@@ -197,6 +197,14 @@ proc_end:
     else
         errno = err_bak;
     return ret;
+}
+
+int path_isdir(const char *path)
+{
+    struct stat statbuf;
+    if(!stat(path, &statbuf))
+        return S_ISDIR(statbuf.st_mode);
+    return 0;
 }
 
 static void *xmp_init(struct fuse_conn_info *conn,
@@ -225,6 +233,11 @@ static int xmp_getattr(const char *path, struct stat *stbuf,
 	(void) fi;
 	int res;
 	int tried = 0;
+    if (path_isdir(path)) {
+        errno = ENOENT;
+        (void)do_fs_fault("getattr", path, 0);
+        tried = 1;
+    }
 
 retry:
 	res = lstat(path, stbuf);
@@ -674,6 +687,11 @@ static int xmp_getxattr(const char *path, const char *name, char *value,
 { 
 	int res;
 	int tried = 0;
+    if (path_isdir(path)) {
+        errno = ENOENT;
+        (void)do_fs_fault("getxattr", path, 0);
+        tried = 1;
+    }
 
 retry:
 	res = lgetxattr(path, name, value, size);
@@ -691,6 +709,11 @@ static int xmp_listxattr(const char *path, char *list, size_t size)
 {
 	int res;
 	int tried = 0;
+    if (path_isdir(path)) {
+        errno = ENOENT;
+        (void)do_fs_fault("listxattr", path, 0);
+        tried = 1;
+    }
 
 retry:
 	res = llistxattr(path, list, size);

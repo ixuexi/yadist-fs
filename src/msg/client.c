@@ -164,7 +164,7 @@ int store_req(void *sock, char *path)
     char *real = path + g_sr_plen;
     int count = 0;
     if (shash_lookup(g_shash, real)) {
-        printf("file %s has been trans\n", path);
+        //printf("file %s has been trans\n", path);
         return -1;
     }
     (void)pthread_mutex_lock(&g_mutex);
