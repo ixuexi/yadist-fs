@@ -18,7 +18,7 @@ target_link_libraries(msg PRIVATE libzmq czmq $<BUILD_INTERFACE:mq_draft>)
 #add_executable(config config.c)
 #target_link_libraries(config PRIVATE msg libzmq czmq $<BUILD_INTERFACE:mq_draft>)
 
-install(TARGETS msg config
+install(TARGETS msg
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin
 )

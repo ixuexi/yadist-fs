@@ -1,3 +1,5 @@
+#include <limits.h>
+#include <stdlib.h>
 #include "msg.h"
 
 int main(int argc, char *argv[])
