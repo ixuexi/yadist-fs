@@ -37,7 +37,8 @@ void get_file_dir(char *dir, char *path)
         last = cur;
         cur = strstr(cur + 1, "/");
     }
-    strncpy(dir, path, last - path);
+    if (dir != path)
+        strncpy(dir, path, last - path);
     dir[last - path] = 0;
 }
 
