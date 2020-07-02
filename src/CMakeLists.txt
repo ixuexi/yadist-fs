@@ -23,3 +23,8 @@ install(TARGETS store_ser store_act
 install(FILES start_ser.sh start_act.sh chroot_test.sh
         DESTINATION bin
 )
+
+install(FILES yadist.conf
+        DESTINATION conf
+)
+

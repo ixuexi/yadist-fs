@@ -13,37 +13,42 @@ void config_load(char *path)
     g_config = zconfig_load(path);
 }
 
-char *config_get_server_endpoint()
+char *config_get_server_endpoint(void)
 {
     return zconfig_get(g_config, "/server/bind", "0.0.0.0:10000");
 }
 
-char *config_get_client_endpoint()
+char *config_get_client_endpoint(void)
 {
     return zconfig_get(g_config, "/client/connect", "0.0.0.0:9999");
 }
 
-char *config_get_fuse_subdir()
+char *config_get_client_mode(void)
+{
+    return zconfig_get(g_config, "/client/mode", "ONDEMAND");
+}
+
+char *config_get_fuse_subdir(void)
 {
     return zconfig_get(g_config, "/fuse/subdir", "");
 }
 
-char *config_get_fuse_mount()
+char *config_get_fuse_mount(void)
 {
     return zconfig_get(g_config, "/fuse/mount", "");
 }
 
-char *config_get_ov_lower()
+char *config_get_ov_lower(void)
 {
     return zconfig_get(g_config, "/overlay/lower", "");
 }
 
-char *config_get_ov_upper()
+char *config_get_ov_upper(void)
 {
     return zconfig_get(g_config, "/overlay/upper", "");
 }
 
-char *config_get_ov_work()
+char *config_get_ov_work(void)
 {
     return zconfig_get(g_config, "/overlay/work", "");
 }

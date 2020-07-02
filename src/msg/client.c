@@ -16,6 +16,7 @@
 void *g_shash;
 char g_sr_path[ST_PATH_MAX];
 int g_sr_plen;
+char *g_mode;
 /*
  * temp lock, fuse muti-work thread conflict
  */
@@ -25,6 +26,16 @@ void set_store_root(int argc, char *argv[])
 {
     g_sr_plen = get_subdir(argc, argv, g_sr_path, ST_PATH_MAX);
     printf("store root dir=%s len=%d\n", g_sr_path, g_sr_plen);
+}
+
+void set_request_mode(char *mode)
+{
+    g_mode = mode;
+}
+
+char *get_request_mode(void)
+{
+    return g_mode;
 }
 
 int tx_file(char *cmd, zmsg_t *msg)
@@ -37,7 +48,7 @@ int tx_file(char *cmd, zmsg_t *msg)
     int fd;
     resolve_path(path, g_sr_path, g_sr_plen, zframe_data(frame), zframe_size(frame), PATH_ABS);
     if (!strncmp(cmd + 8, "CT", 2)) {
-        fd = open(path, O_WRONLY | O_CREAT, 0777);
+        fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0777);
         printf("recv file %s create ret %d\n", path, fd);
         frame = zmsg_next(msg);
         if (frame) {
@@ -171,6 +182,7 @@ int store_req(void *sock, char *path)
     shash_insert(g_shash, real);
     msg = zmsg_new();
     zmsg_addstr(msg, real);
+    zmsg_addstr(msg, get_request_mode());
     int ret = zmsg_send(&msg, s);
     printf("send req path %s ret %d\n", real, ret);
     while (1) {
@@ -197,9 +209,9 @@ int store_req(void *sock, char *path)
     }
 }
 
-void *client_create(void)
+void *client_create(char *endpoint)
 {
-    const char *url = ">tcp://127.0.0.1:10000";
+    const char *url = endpoint;
     zsock_t *s = zsock_new_pair(url);
     g_shash = shash_create();
     printf("connect to url %s ret %p\n", url, s);

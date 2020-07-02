@@ -49,7 +49,7 @@ void file_tran(char *name, struct req_ctx *ctx)
         return;
     do {
         rlen = read(fd, buf, MAX_BUF_LEN);
-        if (rlen <= 0) {
+        if (rlen < 0) {
             printf("error read %s ret %d\n", name, rlen);
             break;
         }
@@ -121,18 +121,14 @@ void end_tran(struct req_ctx *ctx)
     printf("send end msg ret %d\n", ret);
 }
 
-void process_req_path(char *path, struct req_ctx *ctx)
+void request_dir(char *path, struct req_ctx *ctx, zlist_t *subdir)
 {
     DIR *p = opendir(path);
     char fname[512];
-    zmsg_t *msg;
-    int ret;
-    printf("open path %s dir %p\n", path, p);
-    if (!p) {
-        file_tran(path, ctx);
-        goto end_msg;
-    }
-    dir_node_tran(path, ctx);
+
+    if (!p)
+        return;
+    
     for (;;) {
         struct dirent *d = readdir(p);
         if (d == NULL)
@@ -142,6 +138,10 @@ void process_req_path(char *path, struct req_ctx *ctx)
             case DT_REG:
                 file_tran(fname, ctx); break;
             case DT_DIR:
+                if (!strcmp(d->d_name, ".") || !strcmp(d->d_name, ".."))
+                    break;
+                if (ctx->type == REQ_ONESHOT)
+                    zlist_append(subdir, strdup(fname));
                 dir_node_tran(fname, ctx); break;
             case DT_LNK:
                 link_tran(fname, ctx); break;
@@ -149,18 +149,35 @@ void process_req_path(char *path, struct req_ctx *ctx)
                 printf("ignore file %s type %d\n", fname, d->d_type);
         }
     }
-    if (p) {
-        closedir(p);
+    closedir(p);
+}
+
+void process_req_path(char *path, struct req_ctx *ctx)
+{
+    printf("open req path %s\n", path);
+
+    if (path_isdir(path)) {
+        zlist_t *subdir = zlist_new();
+        dir_node_tran(path, ctx);
+        request_dir(path, ctx, subdir);
+        while (zlist_size(subdir)) {
+            char *sub = zlist_pop(subdir);
+            request_dir(sub, ctx, subdir);
+            free(sub);
+        }
+        zlist_destroy(&subdir);
+    }
+    else {
+        file_tran(path, ctx);
     }
 
-end_msg:
     end_tran(ctx);
 }
 
 int proc_req_msg(zsock_t *s, zmsg_t *msg)
 {
     char path[ST_PATH_MAX];
-    struct req_ctx ctx = {s, NULL};
+    struct req_ctx ctx = {s, NULL, REQ_ONDEMAND};
     zframe_t *frame = zmsg_first(msg);
     size_t mlen = zframe_size(frame);
     struct store_req *req;
@@ -169,14 +186,17 @@ int proc_req_msg(zsock_t *s, zmsg_t *msg)
         return -1;
     }
     resolve_path(path, g_rr_path, g_rr_plen, zframe_data(frame), mlen, PATH_ABS);
+    frame = zmsg_next(msg);
+    if (!strncmp(zframe_data(frame), "ONESHOT", zframe_size(frame)))
+        ctx.type = REQ_ONESHOT;
     zmsg_destroy(&msg);
     process_req_path(path, &ctx);
     return 0;
 }
 
-void store_server(void)
+void store_server(char *endpoint)
 {
-    const char *url = "@tcp://127.0.0.1:10000";
+    const char *url = endpoint;
     zsock_t *s = zsock_new_pair(url);
     printf("start store server at %s\n", url);
     while (1) {

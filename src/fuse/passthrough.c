@@ -199,7 +199,7 @@ proc_end:
     return ret;
 }
 
-int path_isdir(const char *path)
+static int path_isdir(const char *path)
 {
     struct stat statbuf;
     if(!stat(path, &statbuf))

@@ -55,3 +55,10 @@ void resolve_path(char path[], char *root, int rlen, char *rela, int len, int ty
     }
 }
 
+int path_isdir(const char *path)
+{
+    struct stat statbuf;
+    if(!stat(path, &statbuf))
+        return S_ISDIR(statbuf.st_mode);
+    return 0;
+}
