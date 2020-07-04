@@ -21,9 +21,10 @@ char *file_buf(void)
     return g_fbuf;
 }
 
-void set_redirect_root(int argc, char *argv[])
+void set_redirect_root(char *path)
 {
-    g_rr_plen = get_subdir(argc, argv, g_rr_path, ST_PATH_MAX);
+    strcpy(g_rr_path, path);
+    g_rr_plen = strlen(path);
     printf("redirect root dir=%s len=%d\n", g_rr_path, g_rr_plen);
 }
 

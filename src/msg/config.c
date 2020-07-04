@@ -18,9 +18,17 @@ char *config_get_server_endpoint(void)
     return zconfig_get(g_config, "/server/bind", "0.0.0.0:10000");
 }
 
+char *config_get_server_path(void)
+{
+    char *path = zconfig_get(g_config, "/server/path", "/");
+    if (!strcmp(path, "/"))
+        return "";
+    return path;
+}
+
 char *config_get_client_endpoint(void)
 {
-    return zconfig_get(g_config, "/client/connect", "0.0.0.0:9999");
+    return zconfig_get(g_config, "/client/connect", "127.0.0.1:10000");
 }
 
 char *config_get_client_mode(void)
@@ -52,6 +60,12 @@ char *config_get_ov_work(void)
 {
     return zconfig_get(g_config, "/overlay/work", "");
 }
+
+char *config_get_ov_mount(void)
+{
+    return zconfig_get(g_config, "/overlay/mount", "");
+}
+
 #ifdef TEST
 int main(int argc, char *argv[])
 {

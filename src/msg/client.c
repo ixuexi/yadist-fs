@@ -22,9 +22,10 @@ char *g_mode;
  */
 pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-void set_store_root(int argc, char *argv[])
+void set_store_root(char *path)
 {
-    g_sr_plen = get_subdir(argc, argv, g_sr_path, ST_PATH_MAX);
+    strcpy(g_sr_path, path);
+    g_sr_plen = strlen(path);
     printf("store root dir=%s len=%d\n", g_sr_path, g_sr_plen);
 }
 

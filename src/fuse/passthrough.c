@@ -61,38 +61,10 @@
 #include <stdlib.h>
 #include "hash.h"
 
-FILE *g_log_file;
-char g_src_path[256];
 char g_root_path[256];
 char g_root_plen;
 int (*g_pfn_req)(void *, char *);
 void *g_sock;
-
-int get_srcdir(int argc, char *argv[])
-{
-    int i;
-    int f = 0;
-    for (i = 1; i < argc; i++) {
-        if (f) {
-            argv[i - 2] = argv[i];
-            continue;
-        }
-        if (!strncmp(argv[i], "srcdir=", 7)) {
-            strncpy(g_src_path, argv[i] + 7, 255);
-            printf("source dir=%s\n", g_src_path);
-            if (strncmp(argv[i - 1], "-o", 2)) {
-                printf("error option: %s %s\n", argv[i - 1], argv[i]);
-                exit(1);
-            }
-            f = 2;
-        }
-    }
-    printf("fuse arg: ");
-    for (i = 0; i < argc - f; i++) 
-        printf("%s ", argv[i]);
-    printf("\n");
-    return f;
-}
 
 void get_pass_subdir(int argc, char *argv[])
 {
@@ -104,64 +76,6 @@ void get_pass_subdir(int argc, char *argv[])
             printf("root dir=%s len=%d\n", g_root_path, g_root_plen);
             break;
         }
-}
-
-void log_init(void)
-{
-	char logf[256];
-	sprintf(logf, "%s/log.log", g_root_path);
-	g_log_file = fopen(logf, "a+");
-}
-
-int exec_command(const char *cmd, char *argv[])
-{
-	pid_t pid = vfork();
-	int status;
-
-	if (pid != 0) {
-		waitpid(pid, &status, 0);
-		return status;
-	}
-	else {
-		execvp(cmd, argv);
-		return 0;
-	}
-}
-
-void strip_last_path(char *path)
-{
-	char *pre = NULL;
-	char *pos = strstr(path, "/");
-
-	while (pos != NULL) {
-		pre = pos;
-		pos = strstr(pos + 1, "/");
-	}
-	if (pre) 
-		*pre = 0;
-}
-
-int do_copy(void *s, char *path)
-{
-	char *rela_p = path + g_root_plen;
-	char real_p[256];
-	char fuse_p[256];
-	char *argv[10];
-	int res;
-
-	sprintf(real_p, "%s%s", g_src_path, rela_p);
-	strncpy(fuse_p, path, 255);
-	fuse_p[255] = 0;
-	strip_last_path(fuse_p);
-	argv[0] = "/bin/cp";
-	argv[1] = "-rf";
-	argv[2] = real_p;
-	argv[3] = fuse_p;
-	argv[4] = NULL;
-	res = exec_command("/bin/cp", argv);
-	fprintf(g_log_file, "do cmd: cp -rf %s %s ret %d\n", argv[2], argv[3], res);
-	fflush(g_log_file);
-	return res;
 }
 
 int filter_out(const char *path)
@@ -851,13 +765,9 @@ static const struct fuse_operations xmp_oper = {
 int passthrough_main(int argc, char *argv[], int (*pfn_req)(void *, char *), void *sock)
 {
 	umask(0);
-        argc -= get_srcdir(argc, argv);
 	get_pass_subdir(argc, argv);
-	log_init();
     if (pfn_req)
         g_pfn_req = pfn_req;
-    else
-        g_pfn_req = do_copy;
     g_sock = sock;
 	return fuse_main(argc, argv, &xmp_oper, NULL);
 }

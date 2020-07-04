@@ -12,7 +12,7 @@ target_compile_definitions(mq_draft INTERFACE -DZMQ_BUILD_DRAFT_API -DCZMQ_BUILD
 #add_executable(client client.c)
 #target_link_libraries(client PRIVATE libzmq czmq)
 
-add_library(msg SHARED client.c server.c fs.c hash.c config.c)
+add_library(msg SHARED client.c server.c fs.c hash.c config.c cmd.c)
 target_link_libraries(msg PRIVATE libzmq czmq $<BUILD_INTERFACE:mq_draft>)
 
 #add_executable(config config.c)

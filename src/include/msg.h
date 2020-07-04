@@ -34,8 +34,8 @@ struct fs_info {
 
 void set_request_mode(char *mode);
 char *get_request_mode(void);
-void set_store_root(int argc, char *argv[]);
-void set_redirect_root(int argc, char *argv[]);
+void set_store_root(char *path);
+void set_redirect_root(char *path);
 int store_req(void *sock, char *path);
 void *client_create(char *endpoint);
 void client_destroy(void *sock);
