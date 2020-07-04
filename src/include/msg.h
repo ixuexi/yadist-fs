@@ -16,6 +16,8 @@
 #define REQ_ONDEMAND 1
 #define REQ_ONESHOT 2
 
+#define REQ_ISONESHOT(type) ((type) == REQ_ONESHOT)
+
 #define path_cut(p, l) ((p) + (l))
 
 struct req_ctx {

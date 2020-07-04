@@ -154,7 +154,7 @@ void request_dir(char *path, struct req_ctx *ctx, zlist_t *subdir)
             case DT_DIR:
                 if (!strcmp(d->d_name, ".") || !strcmp(d->d_name, ".."))
                     break;
-                if (ctx->type == REQ_ONESHOT)
+                if (REQ_ISONESHOT(ctx->type))
                     zlist_append(subdir, strdup(fname));
                 dir_node_tran(fname, ctx); break;
             case DT_LNK:
@@ -166,35 +166,27 @@ void request_dir(char *path, struct req_ctx *ctx, zlist_t *subdir)
     closedir(p);
 }
 
-void process_req_path_large(char *path, struct req_ctx *ctx)
+void request_dir_recurse(char *path, struct req_ctx *ctx)
 {
-    printf("open req path %s\n", path);
-
-    if (path_isdir(path)) {
-        zlist_t *subdir = zlist_new();
-        dir_node_tran(path, ctx);
-        request_dir(path, ctx, subdir);
-        while (zlist_size(subdir)) {
-            char *sub = zlist_pop(subdir);
-            request_dir(sub, ctx, subdir);
-            free(sub);
-        }
-        zlist_destroy(&subdir);
+    zlist_t *subdir = zlist_new();
+    request_dir(path, ctx, subdir);
+    while (zlist_size(subdir)) {
+        char *sub = zlist_pop(subdir);
+        request_dir(sub, ctx, subdir);
+        free(sub);
     }
-    else {
-        file_tran(path, ctx);
-    }
-
-    end_tran(ctx);
+    zlist_destroy(&subdir);
 }
 
-void process_req_path_small(char *path, struct req_ctx *ctx)
+void process_req_path(char *path, struct req_ctx *ctx)
 {
     mode_t mode = path_mode(path);
-    printf("open req path %s mode %x\n", path, mode);
+    printf("small req path %s mode %o\n", path, mode);
     if (S_ISDIR(mode)) {
         printf("req path %s is dir\n", path);
         dir_node_tran(path, ctx);
+        if (SM_ISLARGE() || REQ_ISONESHOT(ctx->type))
+            request_dir_recurse(path, ctx);
     }
     else if (S_ISREG(mode)) {
         printf("req path %s is reg file\n", path);
@@ -205,7 +197,7 @@ void process_req_path_small(char *path, struct req_ctx *ctx)
         link_tran(path, ctx);
     }
     else {
-        printf("unknow mode %d\n", mode);
+        printf("unknow mode %o\n", mode);
     }
     end_tran(ctx);
 }
@@ -226,10 +218,7 @@ int proc_req_msg(zsock_t *s, zmsg_t *msg)
     if (!strncmp(zframe_data(frame), "ONESHOT", zframe_size(frame)))
         ctx.type = REQ_ONESHOT;
     zmsg_destroy(&msg);
-    if (SM_ISLARGE())
-        process_req_path_large(path, &ctx);
-    else
-        process_req_path_small(path, &ctx);
+    process_req_path(path, &ctx);
     return 0;
 }
 
