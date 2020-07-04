@@ -175,11 +175,12 @@ int store_req(void *sock, char *path)
     zmsg_t *msg;
     char *real = path + g_sr_plen;
     int count = 0;
+    (void)pthread_mutex_lock(&g_mutex);
     if (shash_lookup(g_shash, real)) {
-        //printf("file %s has been trans\n", path);
+        printf("path %s has tran\n", real);
+        int l = pthread_mutex_unlock(&g_mutex);
         return -1;
     }
-    (void)pthread_mutex_lock(&g_mutex);
     shash_insert(g_shash, real);
     msg = zmsg_new();
     zmsg_addstr(msg, real);
