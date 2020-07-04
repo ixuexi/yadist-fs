@@ -13,12 +13,25 @@
 char *g_fbuf;
 char g_rr_path[ST_PATH_MAX];
 int g_rr_plen;
+int g_ser_mode;
+
+#define SM_LARGE 1
+#define SM_SMALL 2
+#define SM_ISLARGE() (g_ser_mode == SM_LARGE)
 
 char *file_buf(void)
 {
     if (!g_fbuf)
         g_fbuf = malloc(MAX_BUF_LEN);
     return g_fbuf;
+}
+
+void set_server_mode(char *mode)
+{
+    if (!strcmp(mode, "large"))
+        g_ser_mode = SM_LARGE;
+    else
+        g_ser_mode = SM_SMALL;
 }
 
 void set_redirect_root(char *path)
@@ -153,7 +166,7 @@ void request_dir(char *path, struct req_ctx *ctx, zlist_t *subdir)
     closedir(p);
 }
 
-void process_req_path(char *path, struct req_ctx *ctx)
+void process_req_path_large(char *path, struct req_ctx *ctx)
 {
     printf("open req path %s\n", path);
 
@@ -175,6 +188,28 @@ void process_req_path(char *path, struct req_ctx *ctx)
     end_tran(ctx);
 }
 
+void process_req_path_small(char *path, struct req_ctx *ctx)
+{
+    mode_t mode = path_mode(path);
+    printf("open req path %s mode %x\n", path, mode);
+    if (S_ISDIR(mode)) {
+        printf("req path %s is dir\n", path);
+        dir_node_tran(path, ctx);
+    }
+    else if (S_ISREG(mode)) {
+        printf("req path %s is reg file\n", path);
+        file_tran(path, ctx);
+    }
+    else if (S_ISLNK(mode)) {
+        printf("req path %s is symlink\n", path);
+        link_tran(path, ctx);
+    }
+    else {
+        printf("unknow mode %d\n", mode);
+    }
+    end_tran(ctx);
+}
+
 int proc_req_msg(zsock_t *s, zmsg_t *msg)
 {
     char path[ST_PATH_MAX];
@@ -191,7 +226,10 @@ int proc_req_msg(zsock_t *s, zmsg_t *msg)
     if (!strncmp(zframe_data(frame), "ONESHOT", zframe_size(frame)))
         ctx.type = REQ_ONESHOT;
     zmsg_destroy(&msg);
-    process_req_path(path, &ctx);
+    if (SM_ISLARGE())
+        process_req_path_large(path, &ctx);
+    else
+        process_req_path_small(path, &ctx);
     return 0;
 }
 

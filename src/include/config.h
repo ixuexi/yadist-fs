@@ -4,6 +4,7 @@
 
 void config_load(char *path);
 char *config_get_server_endpoint(void);
+char *config_get_server_mode(void);
 char *config_get_server_path(void);
 char *config_get_client_endpoint(void);
 char *config_get_client_mode(void);

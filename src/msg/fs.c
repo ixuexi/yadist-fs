@@ -62,3 +62,11 @@ int path_isdir(const char *path)
         return S_ISDIR(statbuf.st_mode);
     return 0;
 }
+
+mode_t path_mode(const char *path)
+{
+    struct stat statbuf;
+    if(!lstat(path, &statbuf))
+        return statbuf.st_mode;
+    return 0;
+}

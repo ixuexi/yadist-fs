@@ -35,6 +35,7 @@ struct fs_info {
 void set_request_mode(char *mode);
 char *get_request_mode(void);
 void set_store_root(char *path);
+void set_server_mode(char *mode);
 void set_redirect_root(char *path);
 int store_req(void *sock, char *path);
 void *client_create(char *endpoint);
@@ -45,5 +46,6 @@ int get_subdir(int argc, char *argv[], char *buf, int len);
 void get_file_dir(char *dir, char *path);
 void resolve_path(char path[], char *root, int rlen, char *rela, int len, int type);
 int path_isdir(const char *path);
+mode_t path_mode(const char *path);
 
 #endif

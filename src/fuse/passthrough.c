@@ -102,7 +102,7 @@ int do_fs_fault(const char *where, const char *path, int is_file)
 		ret = -1;
         goto proc_end;
 	}
-	//printf("%s fault path: %s is file %d\n", where, path, is_file);
+	printf("%s fault path: %s\n", where, path);
     if (g_pfn_req)
 	    ret = g_pfn_req(g_sock, (char *)path);
 proc_end:

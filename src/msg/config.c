@@ -18,6 +18,11 @@ char *config_get_server_endpoint(void)
     return zconfig_get(g_config, "/server/bind", "0.0.0.0:10000");
 }
 
+char *config_get_server_mode(void)
+{
+    return zconfig_get(g_config, "/server/mode", "small");
+}
+
 char *config_get_server_path(void)
 {
     char *path = zconfig_get(g_config, "/server/path", "/");
