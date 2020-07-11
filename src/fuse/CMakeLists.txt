@@ -1,5 +1,4 @@
 project(simple)
-cmake_minimum_required(VERSION 3.16)
 #set(FUSE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../package/usr/local)
 
 add_library(libfuse INTERFACE)
