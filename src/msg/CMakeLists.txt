@@ -17,7 +17,10 @@ target_link_libraries(msg PRIVATE libzmq czmq $<BUILD_INTERFACE:mq_draft>)
 add_executable(yasched sched.c)
 target_link_libraries(yasched PRIVATE libzmq czmq $<BUILD_INTERFACE:mq_draft>)
 
-install(TARGETS msg yasched
+add_executable(yaswitch switch.c)
+target_link_libraries(yaswitch PRIVATE libzmq czmq $<BUILD_INTERFACE:mq_draft>)
+
+install(TARGETS msg yasched yaswitch
         LIBRARY DESTINATION lib
         RUNTIME DESTINATION bin
 )

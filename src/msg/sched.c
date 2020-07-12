@@ -8,16 +8,29 @@
 #include <unistd.h>
 #include <signal.h>
 #include <errno.h>
+#include <pthread.h>
 #include "zmq.h"
 #include "czmq.h"
 
 zsock_t *g_agent;
 zsock_t *g_server;
 
+char g_serstat[256];
+char g_agtstat[256];
+
+zsock_t *g_radio;
+zsock_t *g_subs;
+
+zhash_t *g_sermb;
+zhash_t *g_agtmb;
+pthread_mutex_t g_mbmutex = PTHREAD_MUTEX_INITIALIZER;
+
 char *g_myipaddr;
 
 #define SER_PORT "10000"
 #define AGT_PORT "20000"
+#define SW_DISH_PORT "21000"
+#define SW_PUBL_PORT "22000"
 
 #define SER_RCV_TIM 5000
 #define AGT_RCV_TIM 3000
@@ -74,7 +87,77 @@ void set_nohup(void)
     printf("set nohup ret %d\n", ret);
 }
 
-zlist_t *get_cmdlist(char *role)
+zhash_t *get_mb_hash(char *grp)
+{
+    if (!strcmp(grp, "server"))
+        return g_sermb;
+    else
+        return g_agtmb;
+}
+
+void set_mb_hash(zhash_t *h, char *grp)
+{
+    if (!strcmp(grp, "server"))
+        g_sermb = h;
+    else
+        g_agtmb = h;
+}
+
+void restore_mb(zframe_t *f, char *grp)
+{
+    (void)pthread_mutex_lock(&g_mbmutex);
+    zhash_t *h = get_mb_hash(grp);
+    if (h)
+        zhash_destroy(&h);
+    h = zhash_unpack(f);
+    zhash_autofree(h);
+    set_mb_hash(h, grp);
+    (void)pthread_mutex_unlock(&g_mbmutex);
+}
+
+void get_mb(char *buf, char *grp)
+{
+    int len = sprintf(buf, "group %s members:\n", grp);
+    len += sprintf(buf + len, "-----------------------------\n");
+    (void)pthread_mutex_lock(&g_mbmutex);
+    zhash_t *h = get_mb_hash(grp);
+    if (h) {
+        char *val = zhash_first(h);
+        while (val) {
+            len += sprintf(buf + len, "  %s\n", val);
+            val = zhash_next(h);
+        }
+    }
+    else
+        len += sprintf(buf + len, "  no results");
+    (void)pthread_mutex_unlock(&g_mbmutex);
+}
+
+void set_self_state(char *cmd, char *arg, char *role)
+{
+    char *stat;
+    (void)pthread_mutex_lock(&g_mbmutex);
+    if (!strcmp(role, "server"))
+        stat = g_serstat;
+    else
+        stat = g_agtstat;
+    sprintf(stat, "%s_%s", cmd, arg);
+    (void)pthread_mutex_unlock(&g_mbmutex);
+}
+
+char *get_self_state(char *role)
+{
+    char *stat;
+    (void)pthread_mutex_lock(&g_mbmutex);
+    if (!strcmp(role, "server"))
+        stat = g_serstat;
+    else
+        stat = g_agtstat;
+    (void)pthread_mutex_unlock(&g_mbmutex);
+    return stat;
+}
+
+zlist_t *get_cfg_cmdlist(char *role)
 {
     if (!strcmp(role, "server"))
         return g_sercmds;
@@ -82,9 +165,9 @@ zlist_t *get_cmdlist(char *role)
         return g_agtcmds;
 }
 
-struct cmdargs *get_cmd(char *role, char *cmd)
+struct cmdargs *get_cfg_cmd(char *role, char *cmd)
 {
-    zlist_t *cmdlist = get_cmdlist(role);
+    zlist_t *cmdlist = get_cfg_cmdlist(role);
     struct cmdargs *ca = (struct cmdargs *)zlist_first(cmdlist);
     while (ca) {
         if (!strcmp(ca->cmdname, cmd))
@@ -145,7 +228,7 @@ char *decode_msg(zmsg_t *msg, char *role, char *ip, char *arg, struct result *re
     char *ipaddr = NULL;
     char *target = NULL;
     char *cmd = zframe_strdup(fr);
-    struct cmdargs *ca = get_cmd(role, cmd);
+    struct cmdargs *ca = get_cfg_cmd(role, cmd);
     if (ca) {
         fr = zmsg_next(msg);
         ipaddr = zframe_strdup(fr);
@@ -156,11 +239,17 @@ char *decode_msg(zmsg_t *msg, char *role, char *ip, char *arg, struct result *re
         if (arg)
             strcpy(arg, target);
         printf("agent recv ip %s target %s\n", ipaddr, target);
+        set_self_state(ca->cmdname, target, role);
         exec_cmd(ca, ipaddr, target);
         res->code = 0;
         strcpy(res->msg, "OK");
     }
+    else if (!strcmp(cmd, "members")) {
+        res->code = 0;
+        get_mb(res->msg, role);
+    }
     else {
+        set_self_state(cmd, "unknow", role);
         printf("agent recv invalid command %s\n", cmd);
         res->code = -1;
         strcpy(res->msg, "unknow cmd: ");
@@ -201,11 +290,11 @@ void agent_create(char *ip, char *port)
     char end[128];
     (void)sprintf(end, "tcp://%s:%s", ip, port);
     g_agent = zsock_new_rep(end);
+    set_self_state("idle", "idle", "agent");
 }
 
 void agent_start(void)
 {
-    agent_create("0.0.0.0", AGT_PORT);
     printf("start agent on %s\n", AGT_PORT);
     rep_loop("AGENT", g_agent, agent_decode_msg);
 }
@@ -279,26 +368,75 @@ void server_create(char *ip, char *port)
     char end[128];
     (void)sprintf(end, "tcp://%s:%s", ip, port);
     g_server = zsock_new_rep(end);
+    set_self_state("idle", "idle", "server");
 }
 
 void server_start(void)
 {
-    server_create("0.0.0.0", SER_PORT);
     printf("start server on %s\n", SER_PORT);
     rep_loop("SERVER", g_server, server_decode_msg);
 }
 
-void run_process(void (*pfun)(void), int daemon)
+void radio_create(char *port)
 {
-    pid_t pid = 0;
+    char end[128];
+    sprintf(end, "tcp://0.0.0.0:%s", port);
+    zsock_t *s = zsock_new_radio(end);
+    g_radio = s;
+}
 
-    if (daemon) {
-        printf("run in daemon\n");
-        pid = fork();
+void radio_send(char *role)
+{
+    zmsg_t *msg = zmsg_new();
+    zmsg_addstr(msg, g_myipaddr);
+    zmsg_addstr(msg, get_self_state(role));
+    zframe_t *f = zmsg_encode(msg);
+    zmsg_destroy(&msg);
+    zframe_set_group(f, role);
+    zframe_send(&f, g_radio, 0);
+    if (f)
+        zframe_destroy(&f);
+    printf("radio %s send hello\n", role);
+}
+
+void subs_create(char *port)
+{
+    char end[128];
+    sprintf(end, "tcp://0.0.0.0:%s", port);
+    zsock_t *s = zsock_new_sub(end, "mbinfo");
+    g_subs = s;
+}
+
+void subs_start(void)
+{
+    zsock_t *s = g_subs;
+    char buf[512];
+    while (1) {
+        char *topic, *grp;
+        zframe_t *frame;
+        zsock_recv(s, "ssf", &topic, &grp, &frame);
+        if (!frame) {
+            printf("dish recv null msg!\n");
+            usleep(100 * 1000);
+            continue;
+        }
+        restore_mb(frame, grp);
+        get_mb(buf, grp);
+        printf("%s\n", buf);
+        printf("recv subscribe msg : topic %s | %s msg\n", topic, grp);
+        free(topic);
+        free(grp);
+        zframe_destroy(&frame);
     }
-    if (!pid) {
-        pfun();
-    }
+}
+
+void run_thread(void (*pfun)(void))
+{
+    pthread_t thread;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    int ret = pthread_create(&thread, &attr, (void *)pfun, NULL);
+    printf("create thread %ld ret %d\n", thread, ret);
 }
 
 void load_byrole(zconfig_t *cfg, char *role, zlist_t *cmds)
@@ -352,24 +490,36 @@ int main(int argc, char *argv[])
 {
     struct result res;
     int d = 0;
-    if (argc < 2)
-        return 0;
 
     setlinebuf(stdout);
     set_nohup();
     get_local_ipaddr();
     load_config(dirname(argv[0]));
     d = opt_has_daemon(argc, argv);
-    if (!strcmp(argv[1], "server")) {
-        run_process(server_start, d);
+    if (d) {
+        pid_t pid = fork();
+        if (pid) {
+            printf("run in daemon\n");
+            return 0;
+        }
     }
-    else if (!strcmp(argv[1], "agent")) {
-        run_process(agent_start, d);
-    }
-    else if (!strcmp(argv[1], "cmd")) {
+    if (argc >= 2 && !strcmp(argv[1], "cmd")) {
         send_request(argv[2], SER_PORT, argv[3], g_myipaddr, argv[4], &res, 
             SER_RCV_TIM);
         printf("send requst ret %d msg %s\n", res.code, res.msg);
+    }
+
+    agent_create("0.0.0.0", AGT_PORT);
+    server_create("0.0.0.0", SER_PORT);
+    radio_create(SW_DISH_PORT);
+    subs_create(SW_PUBL_PORT);
+    run_thread(server_start);
+    run_thread(agent_start);
+    run_thread(subs_start);
+    while (1) {
+        sleep(3);
+        radio_send("server");
+        radio_send("agent");
     }
     return 0;
 }
